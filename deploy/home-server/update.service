@@ -1,0 +1,14 @@
+[Unit]
+Description=hologram-demos-home: pull bot sources and recreate changed containers
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=samsepiol
+Group=samsepiol
+WorkingDirectory=/home/samsepiol/holo-stack/deploy/home-server
+ExecStart=/home/samsepiol/holo-stack/deploy/home-server/update.sh
+TimeoutStartSec=15min
+StandardOutput=journal
+StandardError=journal

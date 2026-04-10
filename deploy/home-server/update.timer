@@ -1,0 +1,13 @@
+[Unit]
+Description=Run holo-update every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+RandomizedDelaySec=1min
+AccuracySec=1min
+Persistent=true
+Unit=holo-update.service
+
+[Install]
+WantedBy=timers.target
