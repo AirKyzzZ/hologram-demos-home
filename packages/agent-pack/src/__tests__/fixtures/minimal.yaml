@@ -1,0 +1,8 @@
+metadata:
+  id: minimal-bot
+  displayName: Minimal Bot
+  defaultLanguage: en
+
+languages:
+  en:
+    greeting: Hi there

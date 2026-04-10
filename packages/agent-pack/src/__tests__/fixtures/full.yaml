@@ -1,0 +1,52 @@
+metadata:
+  id: full-bot
+  displayName: Full Bot
+  defaultLanguage: en
+  tags:
+    - ai
+    - demo
+
+languages:
+  en:
+    greeting: Welcome!
+    systemPrompt: You are a helpful assistant.
+    uiStrings:
+      menu.title: Main menu
+      menu.back: Back
+  fr:
+    greeting: Bienvenue !
+    systemPrompt: Tu es un assistant utile.
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  temperature: 0.8
+  maxTokens: 1024
+
+memory:
+  backend: redis
+  window: 20
+
+rag:
+  provider: langchain
+  docsPath: ./docs
+  vectorStore: redis
+  chunkSize: 800
+  chunkOverlap: 120
+
+tools:
+  - name: statistics_fetcher
+  - name: geolocation
+    config:
+      apiKey: injected-at-runtime
+
+flows:
+  welcome:
+    enabled: true
+  authentication:
+    enabled: false
+
+integrations:
+  postgres:
+    host: localhost
+    user: holo

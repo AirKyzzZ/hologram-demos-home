@@ -1,0 +1,8 @@
+metadata:
+  id: bad-bot
+  displayName: Bad Bot
+  defaultLanguage: de
+
+languages:
+  en:
+    greeting: Hello
