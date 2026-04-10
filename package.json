@@ -1,0 +1,33 @@
+{
+  "name": "hologram-demos-home",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal lab for building and hosting Verana/2060.io/Hologram verifiable service agents on a home server",
+  "author": "Maxime Mansiet <maxime@maximemansiet.fr>",
+  "license": "MIT",
+  "homepage": "https://github.com/AirKyzzZ/hologram-demos-home",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AirKyzzZ/hologram-demos-home.git"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.7.0",
+  "scripts": {
+    "build": "pnpm -r --filter=\"./packages/*\" --filter=\"./apps/*\" build",
+    "test": "pnpm -r --filter=\"./packages/*\" --filter=\"./apps/*\" test",
+    "test:watch": "pnpm -r --filter=\"./packages/*\" --filter=\"./apps/*\" test:watch",
+    "lint": "pnpm -r --filter=\"./packages/*\" --filter=\"./apps/*\" lint",
+    "format": "prettier --write \"**/*.{ts,js,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,js,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "typecheck": "pnpm -r --filter=\"./packages/*\" --filter=\"./apps/*\" typecheck",
+    "clean": "pnpm -r exec rm -rf dist coverage node_modules && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "prettier": "^3.4.2",
+    "typescript": "5.7.3"
+  }
+}
