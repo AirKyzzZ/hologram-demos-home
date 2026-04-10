@@ -1,0 +1,287 @@
+name: holo-stack
+
+# One Traefik, one set of shared infra containers, one (chatbot + vs-agent)
+# pair per bot. Bots are added by copying a twitter-* block and changing
+# the name, path prefix, and source directory.
+#
+# All containers live on the bridge `holo-net`. Nothing binds to host ports
+# except Traefik on 127.0.0.1:8080 — Tailscale Funnel picks it up and
+# terminates TLS publicly on :443.
+#
+# Port conventions inherited from the twitter bot's upstream compose:
+#   vs-agent container → 3000 (admin API), 3001 (DIDComm inbound)
+#   chatbot container  → APP_PORT (default 3000)
+
+services:
+  # ─── Reverse proxy ────────────────────────────────────────────────
+  traefik:
+    # v3.6 pins a Docker SDK new enough to talk to Docker Engine 28+ which
+    # requires API ≥ 1.40. Older Traefik (v3.1–v3.3) negotiates down to
+    # 1.24 and the daemon rejects it.
+    image: traefik:v3.6
+    container_name: holo-traefik
+    restart: unless-stopped
+    environment:
+      # Belt-and-suspenders in case the SDK negotiation misbehaves.
+      DOCKER_API_VERSION: "1.44"
+    command:
+      - --log.level=INFO
+      - --accesslog=true
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=holo-net
+      - --entrypoints.web.address=:8080
+      # Tailscale Funnel forwards HTTPS:443 → 127.0.0.1:8080 on the host.
+      # Only trust the loopback interface.
+      - --entrypoints.web.forwardedheaders.trustedips=127.0.0.1/32
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [holo-net]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  landing:
+    image: nginx:1.27-alpine
+    container_name: holo-landing
+    restart: unless-stopped
+    volumes:
+      - ./landing:/usr/share/nginx/html:ro
+    networks: [holo-net]
+    labels:
+      - traefik.enable=true
+      # Root landing: lists all bots.
+      - traefik.http.routers.landing.rule=Path(`/`) || Path(`/index.html`) || Path(`/favicon.ico`)
+      - traefik.http.routers.landing.priority=1
+      - traefik.http.routers.landing.service=landing
+      - traefik.http.services.landing.loadbalancer.server.port=80
+      # Per-bot static pages. We rewrite /twitter → /twitter/index.html
+      # at Traefik so nginx serves it directly. Without this rewrite,
+      # nginx issues an HTTP (not HTTPS!) redirect for bare /twitter
+      # because Traefik speaks plain HTTP to it, and Funnel only exposes
+      # 443, so the browser can't follow the redirect.
+      - traefik.http.routers.landing-twitter.rule=Path(`/twitter`) || Path(`/twitter/`)
+      - traefik.http.routers.landing-twitter.priority=10
+      - traefik.http.routers.landing-twitter.service=landing
+      - traefik.http.routers.landing-twitter.middlewares=twitter-index-rewrite
+      - traefik.http.middlewares.twitter-index-rewrite.replacepathregex.regex=^/twitter/?$$
+      - traefik.http.middlewares.twitter-index-rewrite.replacepathregex.replacement=/twitter/index.html
+
+  # ─── Shared infra ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: holo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [holo-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis/redis-stack-server:7.4.0-v1
+    container_name: holo-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks: [holo-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: holo-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    networks: [holo-net]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ─── Twitter bot: vs-agent sidecar ────────────────────────────────
+  twitter-vsa:
+    image: io2060/vs-agent:v1.5.5
+    container_name: holo-twitter-vsa
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file: [./bots/twitter/.env]
+    environment:
+      AGENT_LABEL: "Twitter Bot"
+      # Stable wallet id + key — without these the Credo wallet is
+      # regenerated on every container restart, invalidating every
+      # previously issued invitation.
+      AGENT_WALLET_ID: "twitter-bot"
+      AGENT_WALLET_KEY: ${TWITTER_AGENT_WALLET_KEY}
+      # The public URL of THIS vs-agent. Embedded as serviceEndpoint in the
+      # OOB invitation the chatbot renders as a QR code. Verified upstream:
+      # Credo uses the full string verbatim and HttpInboundTransport listens
+      # on POST /, so Traefik's stripprefix on /twitter/dm bridges correctly.
+      AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/twitter/dm"
+      AGENT_INVITATION_BASE_URL: "https://hologram.zone"
+      AGENT_INVITATION_IMAGE_URL: "https://upload.wikimedia.org/wikipedia/commons/e/e6/Twitter-new-logo.jpg"
+      USE_CORS: "true"
+      # When vs-agent receives a DIDComm event, it POSTs to the chatbot here.
+      EVENTS_BASE_URL: "http://twitter-bot:3000"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+    volumes:
+      - twitter-vsa-data:/root/.afj
+    networks: [holo-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      # vs-agent admin API is on :3000. Routes are registered under
+      # /invitation, /credential-types, etc.; GET / returns 404, which
+      # is fine — "HTTP server responds" is all we need to confirm Credo
+      # has finished initializing. curl without -f treats any HTTP
+      # response (including 4xx) as success; only connection errors fail.
+      test: ["CMD-SHELL", "curl -sS -o /dev/null --max-time 3 http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    labels:
+      - traefik.enable=true
+      # ── DIDComm inbound (wallet → vs-agent) ────────────────────────
+      # POST /twitter/dm → vs-agent:3001/   (strip /twitter/dm)
+      - traefik.http.routers.twitter-vsa-dm.rule=PathPrefix(`/twitter/dm`)
+      - traefik.http.routers.twitter-vsa-dm.priority=100
+      - traefik.http.routers.twitter-vsa-dm.service=twitter-vsa-didcomm
+      - traefik.http.routers.twitter-vsa-dm.middlewares=twitter-vsa-dm-strip
+      - traefik.http.middlewares.twitter-vsa-dm-strip.stripprefix.prefixes=/twitter/dm
+      - traefik.http.services.twitter-vsa-didcomm.loadbalancer.server.port=3001
+      # ── Admin REST (for /qr, /invitation) ──────────────────────────
+      # GET /twitter/qr → vs-agent:3000/v1/qr
+      # GET /twitter/invitation → vs-agent:3000/v1/invitation
+      # Rewrite path: strip /twitter, then add /v1.
+      - traefik.http.routers.twitter-vsa-api.rule=Path(`/twitter/qr`) || Path(`/twitter/invitation`)
+      - traefik.http.routers.twitter-vsa-api.priority=100
+      - traefik.http.routers.twitter-vsa-api.service=twitter-vsa-admin
+      - traefik.http.routers.twitter-vsa-api.middlewares=twitter-vsa-api-rewrite
+      - traefik.http.middlewares.twitter-vsa-api-rewrite.replacepathregex.regex=^/twitter/(qr|invitation)$$
+      - traefik.http.middlewares.twitter-vsa-api-rewrite.replacepathregex.replacement=/v1/$$1
+      - traefik.http.services.twitter-vsa-admin.loadbalancer.server.port=3000
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ─── Twitter bot: chatbot application ─────────────────────────────
+  twitter-bot:
+    image: twitter-bot:latest
+    container_name: holo-twitter-bot
+    restart: unless-stopped
+    env_file: [./bots/twitter/.env]
+    environment:
+      APP_PORT: "3000"
+      VS_AGENT_ADMIN_URL: "http://twitter-vsa:3000"
+      AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/twitter/dm"
+      AGENT_INVITATION_BASE_URL: "https://hologram.zone"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB_NAME: ${POSTGRES_DB}
+      REDIS_URL: "redis://redis:6379"
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: "minio"
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_PUBLIC_URL: "http://minio:9000"
+      MINIO_BUCKET: twitter-bot-images
+    networks: [holo-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      twitter-vsa: { condition: service_healthy }
+    # The chatbot backend has no user-facing UI — its only routes are
+    # internal callbacks invoked by vs-agent via EVENTS_BASE_URL. It
+    # stays on the docker network without Traefik exposure.
+    labels:
+      - traefik.enable=false
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ─── Whisper bot (placeholder, commented out) ─────────────────────
+  # Uncomment when apps/whisper-bot-vs is implemented.
+  #
+  # whisper-vsa:
+  #   image: io2060/vs-agent:v1.5.5
+  #   container_name: holo-whisper-vsa
+  #   env_file: [./bots/whisper/.env]
+  #   environment:
+  #     AGENT_LABEL: "Whisper Bot"
+  #     AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/whisper/dm"
+  #     AGENT_INVITATION_BASE_URL: "https://hologram.zone"
+  #     EVENTS_BASE_URL: "http://whisper-bot:3000"
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     REDIS_HOST: redis
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.routers.whisper-vsa.rule=PathPrefix(`/whisper/dm`)
+  #     - traefik.http.routers.whisper-vsa.priority=100
+  #     - traefik.http.routers.whisper-vsa.middlewares=whisper-vsa-strip
+  #     - traefik.http.middlewares.whisper-vsa-strip.stripprefix.prefixes=/whisper/dm
+  #     - traefik.http.services.whisper-vsa.loadbalancer.server.port=3001
+  # whisper-bot:
+  #   image: whisper-bot:latest
+  #   container_name: holo-whisper-bot
+  #   env_file: [./bots/whisper/.env]
+  #   environment:
+  #     APP_PORT: "3000"
+  #     VS_AGENT_ADMIN_URL: "http://whisper-vsa:3000"
+  #     AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/whisper/dm"
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     POSTGRES_DB_NAME: ${POSTGRES_DB}
+  #     REDIS_URL: "redis://redis:6379"
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.routers.whisper-bot.rule=PathPrefix(`/whisper`)
+  #     - traefik.http.routers.whisper-bot.priority=50
+  #     - traefik.http.routers.whisper-bot.middlewares=whisper-bot-strip
+  #     - traefik.http.middlewares.whisper-bot-strip.stripprefix.prefixes=/whisper
+  #     - traefik.http.services.whisper-bot.loadbalancer.server.port=3000
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  twitter-vsa-data:
+
+networks:
+  holo-net:
+    driver: bridge
+    name: holo-net
