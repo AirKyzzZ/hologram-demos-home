@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hologram Demos — Home</title>
+  <style>
+    :root { color-scheme: dark light; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro", system-ui, sans-serif;
+      max-width: 720px; margin: 4rem auto; padding: 0 1.5rem;
+      line-height: 1.55;
+    }
+    h1 { font-weight: 700; letter-spacing: -0.02em; }
+    .bot {
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      border: 1px solid rgba(128,128,128,0.25);
+      border-radius: 0.75rem;
+    }
+    .bot a { text-decoration: none; font-weight: 600; }
+    .bot .status { font-size: 0.85em; opacity: 0.65; margin-left: 0.5em; }
+    .status.live { color: #3dbf5c; }
+    .status.soon { color: #c8ab1a; }
+    code { background: rgba(128,128,128,0.15); padding: 0.1em 0.4em; border-radius: 0.3em; }
+    footer { margin-top: 3rem; font-size: 0.85em; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <h1>🪩 Hologram Demos</h1>
+  <p>Personal lab for building <a href="https://github.com/verana-labs">Verana</a> / <a href="https://github.com/2060-io">2060.io</a> verifiable service agents. Self-hosted on my home server, exposed via Tailscale Funnel. <a href="https://github.com/AirKyzzZ/hologram-demos-home">Source on GitHub</a>.</p>
+
+  <div class="bot">
+    <a href="/twitter">🐦 Twitter Bot</a>
+    <span class="status live">● live</span>
+    <p>Drafts, reviews, and publishes tweets on my behalf. Scan the QR at <code>/twitter</code> from the Hologram app to start a conversation.</p>
+  </div>
+
+  <div class="bot">
+    <span>🎙️ Whisper Bot</span>
+    <span class="status soon">● coming soon</span>
+    <p>Send audio messages, get transcripts back.</p>
+  </div>
+
+  <div class="bot">
+    <span>🦀 OpenClaw</span>
+    <span class="status soon">● coming soon</span>
+    <p>TBD — placeholder.</p>
+  </div>
+
+  <footer>
+    Hosted on <code>home-server.taila251a3.ts.net</code> via Tailscale Funnel. Built by <a href="https://maximemansiet.fr">Maxime Mansiet</a>.
+  </footer>
+</body>
+</html>
