@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.example
+*.log
+Dockerfile
+README.md
+__tests__
+**/*.spec.ts
