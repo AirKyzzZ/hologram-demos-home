@@ -1,0 +1,199 @@
+# Helm values for deploying AirKyzzZ/hologram-twitter-bot-vs on the home k3s.
+#
+# Chart: the standalone hologram-twitter-bot-vs repo publishes its own
+# `hologram-generic-ai-agent-chart` Helm chart (v1.3.2 at time of writing)
+# to an OCI registry via its CD workflow. Install with:
+#
+#   helm upgrade --install twitter-bot \
+#     oci://registry-1.docker.io/airkyzzz/hologram-generic-ai-agent-chart \
+#     --version 1.3.2 \
+#     -f deploy/charts/twitter-bot-values.yaml \
+#     -n holo-demos
+#
+# If the chart is not published publicly, clone the standalone repo and
+# install from the filesystem:
+#
+#   git clone https://github.com/AirKyzzZ/hologram-twitter-bot-vs.git /tmp/twb
+#   helm dependency update /tmp/twb/charts
+#   helm upgrade --install twitter-bot /tmp/twb/charts \
+#     -f deploy/charts/twitter-bot-values.yaml \
+#     -n holo-demos
+
+global:
+  # Replace with your actual domain before deploying.
+  domain: home.example.com
+
+nameOverride: twitter-bot
+
+image:
+  repository: airkyzzz/hologram-twitter-bot-vs
+  # Tag pinned to a released version — update after each CD run.
+  tag: latest
+  pullPolicy: Always
+
+chatbot:
+  name: twitter-bot
+  replicas: 1
+
+  # Resources sized for a 1-user home-lab bot. Increase memory if you
+  # enable RAG with a large vector store.
+  resources:
+    requests:
+      cpu: '100m'
+      memory: '256Mi'
+    limits:
+      cpu: '500m'
+      memory: '768Mi'
+
+  # Liveness/readiness probes — critical for the 24/7 guarantee.
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 3003
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 3003
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  env:
+    - name: APP_PORT
+      value: '3003'
+    - name: LOG_LEVEL
+      value: 'info'
+    - name: LLM_PROVIDER
+      value: 'openai'
+    - name: OPENAI_MODEL
+      value: 'gpt-4o-mini'
+    - name: OPENAI_TEMPERATURE
+      value: '0.8'
+    - name: OPENAI_MAX_TOKENS
+      value: '500'
+    - name: AGENT_PACK_PATH
+      value: '/app/agent-packs/twitter-bot/agent-pack.yaml'
+    - name: AGENT_MEMORY_BACKEND
+      value: 'redis'
+    - name: AGENT_MEMORY_WINDOW
+      value: '20'
+    - name: VS_AGENT_ADMIN_URL
+      value: 'http://twitter-bot-vs-agent:3000'
+    - name: VS_AGENT_STATS_ENABLED
+      value: 'false'
+    - name: AGENT_INVITATION_BASE_URL
+      value: 'https://hologram.zone'
+
+  # Secrets pulled from the `demos-secrets` K8s secret created by
+  # deploy/k3s/05-create-secrets.sh.
+  envFromSecret:
+    name: demos-secrets
+    items:
+      - secretKey: OPENAI_API_KEY
+        envName: OPENAI_API_KEY
+      - secretKey: TWITTER_APP_KEY
+        envName: TWITTER_APP_KEY
+      - secretKey: TWITTER_APP_SECRET
+        envName: TWITTER_APP_SECRET
+      - secretKey: TWITTER_ACCESS_TOKEN
+        envName: TWITTER_ACCESS_TOKEN
+      - secretKey: TWITTER_ACCESS_SECRET
+        envName: TWITTER_ACCESS_SECRET
+      - secretKey: TWITTER_HANDLE
+        envName: TWITTER_HANDLE
+
+  service:
+    type: ClusterIP
+    port: 3003
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/proxy-body-size: '10m'
+    host: twitter.home.example.com
+    tlsSecret: twitter-home-example-com-tls
+    path: /
+
+# VS agent sidecar — the DIDComm endpoint the Hologram app talks to.
+# Users scan the QR at https://twitter.home.example.com and DIDComm
+# traffic flows to https://dm.twitter.home.example.com which is routed
+# to this sidecar.
+vs-agent-chart:
+  enabled: true
+  name: twitter-bot-vs-agent
+  didcommLabel: Twitter Bot
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    host: dm.twitter.home.example.com
+    tlsSecret: dm-twitter-home-example-com-tls
+
+  extraEnv:
+    - name: AGENT_LABEL
+      value: 'Twitter Bot'
+    - name: AGENT_WALLET_ID
+      value: 'twitter-bot'
+    - name: USE_CORS
+      value: 'true'
+    - name: REDIRECT_DEFAULT_URL_TO_INVITATION_URL
+      value: 'true'
+    - name: SELF_ISSUED_VTC_SERVICE_TYPE
+      value: 'Social Media Assistant'
+    - name: SELF_ISSUED_VTC_SERVICE_DESCRIPTION
+      value: 'Drafts and publishes tweets on behalf of the user'
+
+  extraEnvFromSecret:
+    - name: AGENT_WALLET_KEY
+      secretName: demos-secrets
+      secretKey: TWITTER_BOT_WALLET_KEY
+
+# Shared infra — small for a home lab.
+redis:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 1Gi
+  resources:
+    requests:
+      cpu: '50m'
+      memory: '64Mi'
+    limits:
+      cpu: '200m'
+      memory: '256Mi'
+
+postgres:
+  enabled: true
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: '100m'
+      memory: '256Mi'
+    limits:
+      cpu: '500m'
+      memory: '768Mi'
+  secret:
+    POSTGRES_USER: holo
+    POSTGRES_DB: holo
+  envFromSecret:
+    name: demos-secrets
+    items:
+      - secretKey: POSTGRES_PASSWORD
+        envName: POSTGRES_PASSWORD
+
+stats:
+  enabled: false
+
+artemis:
+  enabled: false

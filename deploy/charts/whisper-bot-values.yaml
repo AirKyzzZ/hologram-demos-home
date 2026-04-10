@@ -1,0 +1,22 @@
+# Helm values for the Whisper speech-to-text bot.
+# STUB — do not deploy. Waiting on apps/whisper-bot-vs implementation.
+#
+# When ready, either:
+#   (a) publish your own Helm chart from apps/whisper-bot-vs (copy the
+#       hologram-twitter-bot-vs chart structure), or
+#   (b) use a generic wrapper chart that pulls the vs-agent-chart sidecar
+#       and your bot's Docker image.
+
+global:
+  domain: home.example.com
+
+# TODO: set to your published image once apps/whisper-bot-vs is built
+image:
+  repository: airkyzzz/hologram-whisper-bot-vs
+  tag: ''
+  pullPolicy: Always
+
+chatbot:
+  name: whisper-bot
+  replicas: 1
+  # TODO: real config

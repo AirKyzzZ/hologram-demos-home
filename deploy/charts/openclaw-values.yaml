@@ -1,0 +1,15 @@
+# Helm values for the OpenClaw bot.
+# STUB — do not deploy. Waiting on apps/openclaw-vs implementation.
+
+global:
+  domain: home.example.com
+
+image:
+  repository: airkyzzz/hologram-openclaw-vs
+  tag: ''
+  pullPolicy: Always
+
+chatbot:
+  name: openclaw
+  replicas: 1
+  # TODO: real config
