@@ -1,0 +1,65 @@
+name: Deploy — helm upgrade on home server
+
+on:
+  workflow_dispatch:
+    inputs:
+      bot:
+        description: 'Which bot to deploy'
+        required: true
+        type: choice
+        options:
+          - twitter-bot
+          - whisper-bot
+          - openclaw
+      dry_run:
+        description: 'helm --dry-run (preview only)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.bot }} to home-server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: home-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOME_SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.HOME_SERVER_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Rsync chart values to home-server
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
+            deploy/charts/ \
+            "${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOST }}:~/hologram-demos-home/deploy/charts/"
+
+      - name: Helm upgrade --install
+        run: |
+          DRY_RUN_FLAG=""
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          ssh -i ~/.ssh/id_ed25519 \
+              "${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOST }}" \
+              "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && \
+               helm upgrade --install ${{ inputs.bot }} \
+                 \$(cat ~/hologram-demos-home/deploy/charts/${{ inputs.bot }}-chart-source.txt 2>/dev/null || echo oci://registry-1.docker.io/airkyzzz/hologram-generic-ai-agent-chart) \
+                 -f ~/hologram-demos-home/deploy/charts/${{ inputs.bot }}-values.yaml \
+                 -n holo-demos \
+                 \$DRY_RUN_FLAG"
+
+      - name: Wait for rollout
+        if: ${{ !inputs.dry_run }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 \
+              "${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOST }}" \
+              "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && \
+               kubectl -n holo-demos rollout status deployment/${{ inputs.bot }} --timeout=5m"
