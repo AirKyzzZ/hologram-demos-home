@@ -1,0 +1,26 @@
+{
+  "name": "@holo/vs-agent-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared base classes, state machine, and types for building Verana/Hologram VS agents",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo 'lint via typecheck'",
+    "clean": "rm -rf dist coverage"
+  },
+  "devDependencies": {
+    "@holo/tsconfig": "workspace:*",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.7",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "5.7.3"
+  }
+}
