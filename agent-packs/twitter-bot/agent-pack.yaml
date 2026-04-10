@@ -1,0 +1,30 @@
+metadata:
+  id: twitter-bot
+  displayName: Twitter Bot
+  defaultLanguage: en
+  tags:
+    - ai
+    - social
+    - twitter
+
+languages:
+  en:
+    greeting: "Hey! I help you draft and publish tweets. What should we write about?"
+    systemPrompt: |
+      You are a Twitter/X social-media manager. You help the user draft,
+      review, and publish tweets. Always keep drafts under 280 characters,
+      avoid generic openers, and avoid hashtags unless the user asks.
+    uiStrings:
+      menu.compose: "Compose a tweet"
+      menu.history: "Show recent posts"
+      menu.cancel: "Cancel"
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  temperature: 0.8
+  maxTokens: 500
+
+memory:
+  backend: redis
+  window: 20

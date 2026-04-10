@@ -1,0 +1,10 @@
+metadata:
+  id: openclaw
+  displayName: OpenClaw
+  defaultLanguage: en
+  tags:
+    - placeholder
+
+languages:
+  en:
+    greeting: "OpenClaw — placeholder pack. Content TBD."

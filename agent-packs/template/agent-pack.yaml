@@ -1,0 +1,29 @@
+metadata:
+  id: template
+  displayName: Template Bot
+  defaultLanguage: en
+  tags:
+    - demo
+    - echo
+
+languages:
+  en:
+    greeting: "Hi! I'm the template bot. Say anything and I'll echo it back."
+    systemPrompt: |
+      You are a minimal echo bot used as a scaffold for building real
+      Hologram VS agents. Keep replies short and helpful.
+    uiStrings:
+      menu.help: "What can you do?"
+      menu.about: "About this bot"
+  fr:
+    greeting: "Salut ! Je suis le bot modèle. Dis-moi quelque chose et je le répète."
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  temperature: 0.3
+  maxTokens: 256
+
+memory:
+  backend: in-memory
+  window: 8

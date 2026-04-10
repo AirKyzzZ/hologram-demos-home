@@ -1,0 +1,11 @@
+metadata:
+  id: whisper-bot
+  displayName: Whisper Bot
+  defaultLanguage: en
+  tags:
+    - speech-to-text
+    - placeholder
+
+languages:
+  en:
+    greeting: "Send me an audio message and I'll transcribe it."
