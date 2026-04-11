@@ -257,13 +257,21 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      REDIS_HOST: redis
+      # NOTE: REDIS_HOST intentionally unset. vs-agent 1.5.5 has a bug
+      # where POST /v1/message queues the payload to a Bull worker and
+      # returns 201 immediately; when the worker then runs
+      # agent.basicMessages.sendMessage(connectionId, content), its
+      # connection lookup fails with RecordNotFoundError even though
+      # the record is present in storage, and the message is silently
+      # dropped. Unsetting REDIS_HOST switches MessageServiceFactory
+      # to CoreMessageService.processMessage (synchronous path) — the
+      # send happens in the HTTP request cycle with a still-live
+      # ConnectionRecord, sidestepping the stale-context bug.
     volumes:
       - whisper-vsa-data:/root/.afj
     networks: [holo-net]
     depends_on:
       postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
     healthcheck:
       # Same rationale as twitter-vsa: GET / returns 404 but that confirms
       # Credo finished initializing. curl without -f treats 4xx as success.
