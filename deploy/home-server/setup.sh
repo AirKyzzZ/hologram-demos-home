@@ -35,6 +35,14 @@ else
   log "bot-sources/twitter already present"
 fi
 
+if [[ ! -d "$HOME/bot-sources/whisper/.git" ]]; then
+  log "cloning hologram-whisper-bot-vs…"
+  git clone https://github.com/AirKyzzZ/hologram-whisper-bot-vs.git \
+    "$HOME/bot-sources/whisper"
+else
+  log "bot-sources/whisper already present"
+fi
+
 # ---- 4. tailscale funnel --------------------------------------------
 if ! command -v tailscale >/dev/null; then
   err "tailscale not installed — install it manually first"

@@ -69,6 +69,13 @@ services:
       - traefik.http.routers.landing-twitter.middlewares=twitter-index-rewrite
       - traefik.http.middlewares.twitter-index-rewrite.replacepathregex.regex=^/twitter/?$$
       - traefik.http.middlewares.twitter-index-rewrite.replacepathregex.replacement=/twitter/index.html
+      # Same pattern for the whisper bot.
+      - traefik.http.routers.landing-whisper.rule=Path(`/whisper`) || Path(`/whisper/`)
+      - traefik.http.routers.landing-whisper.priority=10
+      - traefik.http.routers.landing-whisper.service=landing
+      - traefik.http.routers.landing-whisper.middlewares=whisper-index-rewrite
+      - traefik.http.middlewares.whisper-index-rewrite.replacepathregex.regex=^/whisper/?$$
+      - traefik.http.middlewares.whisper-index-rewrite.replacepathregex.replacement=/whisper/index.html
 
   # ─── Shared infra ─────────────────────────────────────────────────
   postgres:
@@ -231,55 +238,97 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
-  # ─── Whisper bot (placeholder, commented out) ─────────────────────
-  # Uncomment when apps/whisper-bot-vs is implemented.
-  #
-  # whisper-vsa:
-  #   image: io2060/vs-agent:v1.5.5
-  #   container_name: holo-whisper-vsa
-  #   env_file: [./bots/whisper/.env]
-  #   environment:
-  #     AGENT_LABEL: "Whisper Bot"
-  #     AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/whisper/dm"
-  #     AGENT_INVITATION_BASE_URL: "https://hologram.zone"
-  #     EVENTS_BASE_URL: "http://whisper-bot:3000"
-  #     POSTGRES_HOST: postgres
-  #     POSTGRES_USER: ${POSTGRES_USER}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #     REDIS_HOST: redis
-  #   labels:
-  #     - traefik.enable=true
-  #     - traefik.http.routers.whisper-vsa.rule=PathPrefix(`/whisper/dm`)
-  #     - traefik.http.routers.whisper-vsa.priority=100
-  #     - traefik.http.routers.whisper-vsa.middlewares=whisper-vsa-strip
-  #     - traefik.http.middlewares.whisper-vsa-strip.stripprefix.prefixes=/whisper/dm
-  #     - traefik.http.services.whisper-vsa.loadbalancer.server.port=3001
-  # whisper-bot:
-  #   image: whisper-bot:latest
-  #   container_name: holo-whisper-bot
-  #   env_file: [./bots/whisper/.env]
-  #   environment:
-  #     APP_PORT: "3000"
-  #     VS_AGENT_ADMIN_URL: "http://whisper-vsa:3000"
-  #     AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/whisper/dm"
-  #     POSTGRES_HOST: postgres
-  #     POSTGRES_USER: ${POSTGRES_USER}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #     POSTGRES_DB_NAME: ${POSTGRES_DB}
-  #     REDIS_URL: "redis://redis:6379"
-  #   labels:
-  #     - traefik.enable=true
-  #     - traefik.http.routers.whisper-bot.rule=PathPrefix(`/whisper`)
-  #     - traefik.http.routers.whisper-bot.priority=50
-  #     - traefik.http.routers.whisper-bot.middlewares=whisper-bot-strip
-  #     - traefik.http.middlewares.whisper-bot-strip.stripprefix.prefixes=/whisper
-  #     - traefik.http.services.whisper-bot.loadbalancer.server.port=3000
+  # ─── Whisper bot: vs-agent sidecar ────────────────────────────────
+  whisper-vsa:
+    image: io2060/vs-agent:v1.5.5
+    container_name: holo-whisper-vsa
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file: [./bots/whisper/.env]
+    environment:
+      AGENT_LABEL: "Whisper Bot"
+      AGENT_WALLET_ID: "whisper-bot"
+      AGENT_WALLET_KEY: ${WHISPER_AGENT_WALLET_KEY}
+      AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/whisper/dm"
+      AGENT_INVITATION_BASE_URL: "https://hologram.zone"
+      AGENT_INVITATION_IMAGE_URL: "https://upload.wikimedia.org/wikipedia/commons/8/8a/OOjs_UI_icon_volumeUp-ltr.svg"
+      USE_CORS: "true"
+      EVENTS_BASE_URL: "http://whisper-bot:3000"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+    volumes:
+      - whisper-vsa-data:/root/.afj
+    networks: [holo-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      # Same rationale as twitter-vsa: GET / returns 404 but that confirms
+      # Credo finished initializing. curl without -f treats 4xx as success.
+      test: ["CMD-SHELL", "curl -sS -o /dev/null --max-time 3 http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    labels:
+      - traefik.enable=true
+      # ── DIDComm inbound (wallet → vs-agent) ────────────────────────
+      - traefik.http.routers.whisper-vsa-dm.rule=PathPrefix(`/whisper/dm`)
+      - traefik.http.routers.whisper-vsa-dm.priority=100
+      - traefik.http.routers.whisper-vsa-dm.service=whisper-vsa-didcomm
+      - traefik.http.routers.whisper-vsa-dm.middlewares=whisper-vsa-dm-strip
+      - traefik.http.middlewares.whisper-vsa-dm-strip.stripprefix.prefixes=/whisper/dm
+      - traefik.http.services.whisper-vsa-didcomm.loadbalancer.server.port=3001
+      # ── Admin REST (for /qr, /invitation) ──────────────────────────
+      - traefik.http.routers.whisper-vsa-api.rule=Path(`/whisper/qr`) || Path(`/whisper/invitation`)
+      - traefik.http.routers.whisper-vsa-api.priority=100
+      - traefik.http.routers.whisper-vsa-api.service=whisper-vsa-admin
+      - traefik.http.routers.whisper-vsa-api.middlewares=whisper-vsa-api-rewrite
+      - traefik.http.middlewares.whisper-vsa-api-rewrite.replacepathregex.regex=^/whisper/(qr|invitation)$$
+      - traefik.http.middlewares.whisper-vsa-api-rewrite.replacepathregex.replacement=/v1/$$1
+      - traefik.http.services.whisper-vsa-admin.loadbalancer.server.port=3000
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ─── Whisper bot: chatbot application ─────────────────────────────
+  whisper-bot:
+    image: whisper-bot:latest
+    container_name: holo-whisper-bot
+    restart: unless-stopped
+    env_file: [./bots/whisper/.env]
+    environment:
+      APP_PORT: "3000"
+      VS_AGENT_ADMIN_URL: "http://whisper-vsa:3000"
+      AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/whisper/dm"
+      AGENT_INVITATION_BASE_URL: "https://hologram.zone"
+      AGENT_PACK_PATH: "/app/agent-packs/whisper/agent-pack.yaml"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB_NAME: ${POSTGRES_DB}
+      REDIS_URL: "redis://redis:6379"
+      REDIS_HOST: redis
+    networks: [holo-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      whisper-vsa: { condition: service_healthy }
+    # Chatbot backend is internal-only — vs-agent calls it via EVENTS_BASE_URL.
+    labels:
+      - traefik.enable=false
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   postgres-data:
   redis-data:
   minio-data:
   twitter-vsa-data:
+  whisper-vsa-data:
 
 networks:
   holo-net:

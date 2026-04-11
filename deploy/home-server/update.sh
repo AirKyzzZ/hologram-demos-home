@@ -32,7 +32,7 @@ git -C "$(git rev-parse --show-toplevel)" pull --ff-only --quiet || log "deploy 
 # Add a new line when you add a new bot.
 declare -A BOTS=(
   [twitter-bot]=twitter
-  # [whisper-bot]=whisper
+  [whisper-bot]=whisper
   # [openclaw-bot]=openclaw
 )
 
