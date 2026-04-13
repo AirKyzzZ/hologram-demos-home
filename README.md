@@ -66,6 +66,7 @@ See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the deeper dive, includ
 | `apps/_template-vs/` | Runnable NestJS echo agent — **copy this when starting a new bot**. 24 unit tests, `/health` probes, graceful shutdown, multi-stage Dockerfile. |
 | `apps/whisper-bot-vs/` | Placeholder for a speech-to-text VS agent (audio → Whisper → transcript reply). |
 | `apps/openclaw-vs/` | Placeholder. |
+| `../../2060-io/hologram-holoclaw-bot-vs/` | **HoloClaw** — multiplayer AI workspace bot (workspaces, invites, BYOMCP, live tool feed, approval gates). Forked from `hologram-generic-ai-agent-vs`. Wired into the home-server compose stack as `holoclaw-vsa` + `holoclaw-bot`, landing page at `/holoclaw`. 75 workspace-layer tests. |
 | `packages/vs-agent-core/` | Shared `BaseCoreService` (abstract event dispatch), `StateMachine`, session store. **Zero runtime deps** — structurally-typed over `@2060.io/vs-agent-nestjs-client` so tests don't need the full SDK. 32 tests. |
 | `packages/agent-pack/` | YAML loader + Zod schema + env-var override resolver for per-bot runtime config. 36 tests. |
 | `packages/tsconfig/` | Shared strict TS presets. |

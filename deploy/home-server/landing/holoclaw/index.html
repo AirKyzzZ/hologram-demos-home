@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🪝 HoloClaw — Hologram Demos</title>
+  <style>
+    :root { color-scheme: dark light; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro", system-ui, sans-serif;
+      max-width: 620px; margin: 3rem auto; padding: 0 1.5rem;
+      line-height: 1.55; text-align: center;
+    }
+    h1 { font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.25em; }
+    .subtitle { opacity: 0.7; margin-top: 0; }
+    .pitch {
+      text-align: left;
+      padding: 1rem 1.5rem;
+      border: 1px solid rgba(128,128,128,0.25);
+      border-radius: 0.75rem;
+      margin: 1.5rem 0;
+      background: rgba(128,128,128,0.05);
+    }
+    .pitch ul { padding-left: 1.2rem; margin: 0.5rem 0; }
+    .pitch li { margin: 0.4rem 0; }
+    .qr {
+      display: block;
+      margin: 2rem auto;
+      width: min(360px, 80vw);
+      height: auto;
+      padding: 1rem;
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .steps {
+      text-align: left;
+      padding: 1rem 1.5rem;
+      border: 1px solid rgba(128,128,128,0.25);
+      border-radius: 0.75rem;
+      margin: 1.5rem 0;
+    }
+    .steps li { margin: 0.5rem 0; }
+    code {
+      background: rgba(128,128,128,0.15);
+      padding: 0.1em 0.4em;
+      border-radius: 0.3em;
+      font-size: 0.9em;
+    }
+    a { color: inherit; }
+    .back { display: inline-block; margin-top: 1rem; opacity: 0.7; }
+    footer { margin-top: 3rem; font-size: 0.85em; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <h1>🪝 HoloClaw</h1>
+  <p class="subtitle">Multiplayer AI workspace on Hologram. OpenClaw is single-player — HoloClaw is a team.</p>
+
+  <div class="pitch">
+    <strong>What makes it different:</strong>
+    <ul>
+      <li>Multiple verified users share one live AI workspace, each on their own encrypted DIDComm channel.</li>
+      <li>Role-based tool access: <code>owner</code>, <code>collaborator</code>, <code>observer</code>, <code>approver</code>.</li>
+      <li>Runtime tool curation — admins paste MCP server URLs from the chat; the agent gets new tools instantly.</li>
+      <li>Live tool execution feed — every member sees what the agent is doing in real time.</li>
+      <li>Approval gates — sensitive tool calls require sign-off from a designated approver.</li>
+    </ul>
+  </div>
+
+  <img class="qr" src="/holoclaw/qr" alt="HoloClaw invitation QR code" onerror="this.outerHTML='<p style=&quot;color:#c0392b&quot;>QR not available — vs-agent may still be starting. Refresh in a few seconds.</p>'">
+
+  <ol class="steps">
+    <li>Install the <strong>Hologram</strong> app from the App Store or Play Store.</li>
+    <li>Open the app and tap the scan / connect button.</li>
+    <li>Scan the QR code above — you'll land in the <strong>lobby</strong>.</li>
+    <li>Tap <em>Create workspace</em> to start a new one, or paste an invite token to join.</li>
+    <li>Once in a workspace, tap <em>Invite a member</em> to get a token to share with a teammate.</li>
+  </ol>
+
+  <p>Raw invitation URL: <a href="/holoclaw/invitation">/holoclaw/invitation</a></p>
+
+  <a class="back" href="/">← back to all bots</a>
+
+  <footer>
+    Powered by <a href="https://github.com/2060-io">2060.io</a> VS Agent + <a href="https://github.com/verana-labs">Verana</a> trust registry. Hosted from a home server via Tailscale Funnel.
+  </footer>
+</body>
+</html>

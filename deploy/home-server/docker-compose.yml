@@ -76,6 +76,13 @@ services:
       - traefik.http.routers.landing-whisper.middlewares=whisper-index-rewrite
       - traefik.http.middlewares.whisper-index-rewrite.replacepathregex.regex=^/whisper/?$$
       - traefik.http.middlewares.whisper-index-rewrite.replacepathregex.replacement=/whisper/index.html
+      # HoloClaw — multiplayer AI workspace bot.
+      - traefik.http.routers.landing-holoclaw.rule=Path(`/holoclaw`) || Path(`/holoclaw/`)
+      - traefik.http.routers.landing-holoclaw.priority=10
+      - traefik.http.routers.landing-holoclaw.service=landing
+      - traefik.http.routers.landing-holoclaw.middlewares=holoclaw-index-rewrite
+      - traefik.http.middlewares.holoclaw-index-rewrite.replacepathregex.regex=^/holoclaw/?$$
+      - traefik.http.middlewares.holoclaw-index-rewrite.replacepathregex.replacement=/holoclaw/index.html
 
   # ─── Shared infra ─────────────────────────────────────────────────
   postgres:
@@ -331,12 +338,96 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  # ─── HoloClaw bot: vs-agent sidecar ───────────────────────────────
+  holoclaw-vsa:
+    image: io2060/vs-agent:v1.5.5
+    container_name: holo-holoclaw-vsa
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file: [./bots/holoclaw/.env]
+    environment:
+      AGENT_LABEL: "HoloClaw"
+      AGENT_WALLET_ID: "holoclaw-bot"
+      AGENT_WALLET_KEY: ${HOLOCLAW_AGENT_WALLET_KEY}
+      AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/holoclaw/dm"
+      AGENT_INVITATION_BASE_URL: "https://hologram.zone"
+      AGENT_INVITATION_IMAGE_URL: "https://raw.githubusercontent.com/AirKyzzZ/hologram-holoclaw-bot-vs/main/logo.png"
+      USE_CORS: "true"
+      EVENTS_BASE_URL: "http://holoclaw-bot:3000"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+    volumes:
+      - holoclaw-vsa-data:/root/.afj
+    networks: [holo-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sS -o /dev/null --max-time 3 http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    labels:
+      - traefik.enable=true
+      # ── DIDComm inbound (wallet → vs-agent) ────────────────────────
+      - traefik.http.routers.holoclaw-vsa-dm.rule=PathPrefix(`/holoclaw/dm`)
+      - traefik.http.routers.holoclaw-vsa-dm.priority=100
+      - traefik.http.routers.holoclaw-vsa-dm.service=holoclaw-vsa-didcomm
+      - traefik.http.routers.holoclaw-vsa-dm.middlewares=holoclaw-vsa-dm-strip
+      - traefik.http.middlewares.holoclaw-vsa-dm-strip.stripprefix.prefixes=/holoclaw/dm
+      - traefik.http.services.holoclaw-vsa-didcomm.loadbalancer.server.port=3001
+      # ── Admin REST (for /qr, /invitation) ──────────────────────────
+      - traefik.http.routers.holoclaw-vsa-api.rule=Path(`/holoclaw/qr`) || Path(`/holoclaw/invitation`)
+      - traefik.http.routers.holoclaw-vsa-api.priority=100
+      - traefik.http.routers.holoclaw-vsa-api.service=holoclaw-vsa-admin
+      - traefik.http.routers.holoclaw-vsa-api.middlewares=holoclaw-vsa-api-rewrite
+      - traefik.http.middlewares.holoclaw-vsa-api-rewrite.replacepathregex.regex=^/holoclaw/(qr|invitation)$$
+      - traefik.http.middlewares.holoclaw-vsa-api-rewrite.replacepathregex.replacement=/v1/$$1
+      - traefik.http.services.holoclaw-vsa-admin.loadbalancer.server.port=3000
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ─── HoloClaw bot: chatbot application ────────────────────────────
+  holoclaw-bot:
+    image: holoclaw-bot:latest
+    container_name: holo-holoclaw-bot
+    restart: unless-stopped
+    env_file: [./bots/holoclaw/.env]
+    environment:
+      APP_PORT: "3000"
+      VS_AGENT_ADMIN_URL: "http://holoclaw-vsa:3000"
+      AGENT_ENDPOINT: "${PUBLIC_BASE_URL}/holoclaw/dm"
+      AGENT_INVITATION_BASE_URL: "https://hologram.zone"
+      AGENT_PACK_PATH: "/app/agent-packs/holoclaw/agent-pack.yaml"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB_NAME: ${POSTGRES_DB}
+      REDIS_URL: "redis://redis:6379"
+      REDIS_HOST: redis
+    networks: [holo-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      holoclaw-vsa: { condition: service_healthy }
+    # Chatbot backend is internal-only — vs-agent calls it via EVENTS_BASE_URL.
+    labels:
+      - traefik.enable=false
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
 volumes:
   postgres-data:
   redis-data:
   minio-data:
   twitter-vsa-data:
   whisper-vsa-data:
+  holoclaw-vsa-data:
 
 networks:
   holo-net:
