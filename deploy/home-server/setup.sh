@@ -43,6 +43,14 @@ else
   log "bot-sources/whisper already present"
 fi
 
+if [[ ! -d "$HOME/bot-sources/holoclaw/.git" ]]; then
+  log "cloning hologram-holoclaw-bot-vs…"
+  git clone https://github.com/AirKyzzZ/hologram-holoclaw-bot-vs.git \
+    "$HOME/bot-sources/holoclaw"
+else
+  log "bot-sources/holoclaw already present"
+fi
+
 # ---- 4. tailscale funnel --------------------------------------------
 if ! command -v tailscale >/dev/null; then
   err "tailscale not installed — install it manually first"

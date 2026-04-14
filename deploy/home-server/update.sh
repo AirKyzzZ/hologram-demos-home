@@ -33,6 +33,7 @@ git -C "$(git rev-parse --show-toplevel)" pull --ff-only --quiet || log "deploy 
 declare -A BOTS=(
   [twitter-bot]=twitter
   [whisper-bot]=whisper
+  [holoclaw-bot]=holoclaw
   # [openclaw-bot]=openclaw
 )
 
